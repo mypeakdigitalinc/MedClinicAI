@@ -1,0 +1,125 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Auth UID)
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string
+    //   - role: string (required, ['patient', 'doctor', 'front_desk'])
+    //   - specialization: string (optional, for doctors)
+    //
+    // Collection: appointments
+    // Document ID: appointmentId
+    // Fields:
+    //   - patientId: string (required)
+    //   - patientName: string
+    //   - doctorId: string (required)
+    //   - doctorName: string
+    //   - startTime: timestamp (required)
+    //   - endTime: timestamp (required)
+    //   - status: string (required, ['New', 'Confirmed', 'Upcoming', 'Checked In', 'Completed', 'No Show'])
+    //   - notes: string
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isFrontDesk() {
+      return isAuthenticated() && (
+        getUserRole() == 'front_desk' || 
+        (request.auth.token.email == "mypeakdigitalinc@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isDoctor() {
+      return isAuthenticated() && getUserRole() == 'doctor';
+    }
+
+    function isPatient() {
+      return isAuthenticated() && getUserRole() == 'patient';
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['patient', 'doctor', 'front_desk'] &&
+             (!('displayName' in data) || data.displayName is string) &&
+             (!('specialization' in data) || data.specialization is string) &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidAppointment(data) {
+      return data.keys().hasAll(['patientId', 'doctorId', 'startTime', 'endTime', 'status']) &&
+             data.patientId is string &&
+             data.doctorId is string &&
+             data.startTime is timestamp &&
+             data.endTime is timestamp &&
+             data.status in ['New', 'Confirmed', 'Upcoming', 'Checked In', 'Completed', 'No Show'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Users can read their own profile. Front desk and doctors can read all profiles.
+      allow read: if isOwner(userId) || isFrontDesk() || isDoctor();
+      
+      // Users can create their own profile as a patient. Front desk can create any profile.
+      allow create: if (isOwner(userId) && request.resource.data.role == 'patient' && isValidUser(request.resource.data)) || 
+                    (isFrontDesk() && isValidUser(request.resource.data));
+      
+      // Users can update their own profile (but not their role). Front desk can update any profile.
+      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role && isValidUser(request.resource.data)) || 
+                    (isFrontDesk() && isValidUser(request.resource.data));
+      
+      // Front desk can delete user profiles.
+      allow delete: if isFrontDesk();
+    }
+
+    match /appointments/{appointmentId} {
+      // Patients can read their own appointments. Doctors and Front Desk can read all.
+      allow read: if isAuthenticated() && (
+        isFrontDesk() || 
+        isDoctor() || 
+        (isPatient() && resource.data.patientId == request.auth.uid)
+      );
+
+      // Patients can create appointments for themselves. Front desk can create any.
+      allow create: if isAuthenticated() && (
+        isFrontDesk() || 
+        (isPatient() && request.resource.data.patientId == request.auth.uid && isValidAppointment(request.resource.data))
+      );
+
+      // Patients can update their own appointments (status changes limited). 
+      // Doctors and Front Desk can update any.
+      allow update: if isAuthenticated() && (
+        isFrontDesk() || 
+        isDoctor() || 
+        (isPatient() && resource.data.patientId == request.auth.uid && isValidAppointment(request.resource.data))
+      );
+
+      allow delete: if isFrontDesk();
+    }
+  }
+}

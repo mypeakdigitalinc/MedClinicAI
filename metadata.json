@@ -1,0 +1,5 @@
+{
+  "name": "MedClinic AI",
+  "description": "A medical clinic appointment management application with an integrated AI Chatbot and Voice Agent.",
+  "requestFramePermissions": ["microphone"]
+}
