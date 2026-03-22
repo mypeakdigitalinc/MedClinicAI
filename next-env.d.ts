@@ -1,6 +1,8 @@
 /// <reference types="next" />
-/// <reference types="next/image-types/global" />
-/// <reference path="./.next/types/routes.d.ts" />
+/// <reference types="next/navigation-types/navigation" />
 
-// NOTE: This file should not be edited
-// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+// see https://nextjs.org/docs/app/api-reference/config/typescript#video-component
+declare module '*.mp4' {
+  const src: string;
+  export default src;
+}

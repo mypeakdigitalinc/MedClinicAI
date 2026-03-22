@@ -43,19 +43,25 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
+    function hasRole(role) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             getUserRole() == role;
+    }
+
     function isFrontDesk() {
       return isAuthenticated() && (
-        getUserRole() == 'front_desk' || 
-        (request.auth.token.email == "mypeakdigitalinc@gmail.com" && request.auth.token.email_verified == true)
+        (request.auth.token.email == "mypeakdigitalinc@gmail.com" && request.auth.token.email_verified == true) ||
+        hasRole('front_desk')
       );
     }
 
     function isDoctor() {
-      return isAuthenticated() && getUserRole() == 'doctor';
+      return hasRole('doctor');
     }
 
     function isPatient() {
-      return isAuthenticated() && getUserRole() == 'patient';
+      return hasRole('patient');
     }
 
     function isValidUser(data) {
